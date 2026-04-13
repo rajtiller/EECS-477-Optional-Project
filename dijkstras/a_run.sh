@@ -1,2 +1,2 @@
 make
-./pattern-matching
+./dijkstras
