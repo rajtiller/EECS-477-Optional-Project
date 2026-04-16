@@ -19,7 +19,7 @@ public:
   size_t distance_to_S;
   Node *parent;                 // for fibonacci heap
   std::vector<Node *> children; // for fibonacci heap
-  size_t rank;                  // for fibonacci heap
+  int rank;                  // for fibonacci heap
   bool marked;                  // for fibonacci heap
 
   void print_node() const {
@@ -123,7 +123,7 @@ public:
 class FibonacciHeap : public PriorityStructure {
 public:
   std::vector<Node *> roots;
-  size_t max_rank = 0;
+  int max_rank = -1; // -1 because we start at 0 and increment
   std::string name() const override { return "fibonacci heap"; }
   struct FibonacciHeapComparator {
     bool operator()(const Node *a, const Node *b) const {
@@ -135,6 +135,9 @@ public:
   };
 
   Node *Merge(Node *a, Node *b) {
+    if (!(a && b && a->rank == b->rank)) {
+        std::cout << "Merge error: a: " << a->id << " b: " << b->id << " a->rank: " << a->rank << " b->rank: " << b->rank << std::endl;
+    }
     assert(a && b && a->rank == b->rank);
     if (a->distance_to_S < b->distance_to_S) {
       a->children.push_back(b);
@@ -150,60 +153,104 @@ public:
   }
 
   Node *pop_min() override {
+    print_heap("before popping min node");
     size_t min_distance = std::numeric_limits<size_t>::max();
     Node *min_node = nullptr;
     for (auto *root : roots) {
-      if (root->distance_to_S < min_distance) {
+      if (root && root->distance_to_S < min_distance) {
         min_distance = root->distance_to_S;
         min_node = root;
       }
     }
     roots[min_node->rank] = nullptr;
+    if (min_node->rank == max_rank) {
+      max_rank--;
+      roots.pop_back();
+    }
     std::vector<Node *> new_roots = min_node->children;
+    min_node->children.clear();
+    min_node->marked = false;
+    min_node->rank = 0;
+    min_node->parent = nullptr;
+    for (size_t i = 0; i < new_roots.size(); i++) {
+        new_roots[i]->parent = nullptr;
+    }
     Node *carry = nullptr;
-    for (size_t i = 0; i <= max_rank; i++) { // there might be a fence post error here
-      if (roots[i] && new_roots[i]) {
+    for (int i = 0; i <= max_rank; i++) { // there might be a fence post error here
+      if (roots[i] && new_roots.size() > i && new_roots[i]) {
+        assert(roots[i]->rank == i);
+        assert(new_roots[i]->rank == i);
         Node *temp = Merge(roots[i], new_roots[i]);
         roots[i] = carry;
         carry = temp;
       } else if (roots[i] && carry) {
         carry = Merge(roots[i], carry);
-      } else if (new_roots[i] && carry) {
+        roots[i] = nullptr;
+      } else if (new_roots.size() > i && new_roots[i] && carry) {
         carry = Merge(new_roots[i], carry);
-      } else {
+      } else if (carry) {
         roots[i] = carry;
+      } else if (new_roots.size() > i && new_roots[i]) {
+        roots[i] = new_roots[i];
+      } else {
+        roots[i] = roots[i]; // keep it as is
       }
     }
+    if (carry) {
+        assert(carry->rank == max_rank + 1);
+        roots.push_back(carry);
+        max_rank++;
+    }
+    print_heap("after popping min node");
     return min_node;
     // FINISH THIS!!!
   }
 
   void insert(Node *node) override {
+    // node->parent = nullptr; // removing these so we can use insert in decrease_key
+    // node->marked = false;
+    // node->children.clear();
+    // node->rank = 0;
+    print_heap("before inserting node " + std::to_string(node->id) + " rank: " + std::to_string(node->rank));
     Node *carry = node;
-    size_t curr_rank = 0;
-    while (carry) {
-      if (curr_rank > max_rank) {
-        max_rank = curr_rank;
+    while (true) {
+        assert(carry);
+        assert(carry->rank <= max_rank + 1); // we can make this stronger later
+      if (carry->rank > max_rank) {
+        max_rank = carry->rank;
         roots.push_back(nullptr);
       }
-      if (roots[curr_rank] == nullptr) {
-        roots[curr_rank] = carry;
+      if (roots[carry->rank] == nullptr) {
+        roots[carry->rank] = carry;
         break;
       }
-      carry = Merge(roots[curr_rank], carry); // this should update the rank of carry
-      curr_rank++;
-      roots[curr_rank] = nullptr;
+      Node *temp = roots[carry->rank];
+      roots[carry->rank] = nullptr;
+      carry = Merge(temp, carry); // this should update the rank of carry
     }
+    print_heap("after inserting node " + std::to_string(node->id));
   }
 
   void decrease_key(Node *node, size_t new_val) override {
+    node->distance_to_S = new_val;
+
+    print_heap("before decreasing key of node " + std::to_string(node->id));
+    
     std::stack<Node *> removed_nodes;
     while (node->parent && node->parent->marked) {
       removed_nodes.push(node->parent);
+      node->parent->children.erase(std::find(node->parent->children.begin(), node->parent->children.end(), node));
+        // make sure above line works
+      node->parent->rank-=2; // i think this is correct but we need to test it
       node = node->parent;
     }
     if (node->parent) {
-      node->parent->marked = true;
+        node->parent->marked = true;
+        node->parent->children.erase(std::find(node->parent->children.begin(), node->parent->children.end(), node));
+        // make sure above line works
+    } else {
+        assert(roots[node->rank] == node);
+        roots[node->rank] = nullptr;
     }
 
     while (!removed_nodes.empty()) {
@@ -212,11 +259,36 @@ public:
       removed_node->marked = false;
       insert(removed_node);
     }
+    print_heap("after decreasing key of node " + std::to_string(node->id));
   }
 
   bool is_empty() const override { return roots.empty(); }
 
+
   void print_heap() override {}
+  void print_heap(std::string message) {
+    std::cout << "*************************\n";
+    std::cout << message << std::endl;
+    std::cout << "max_rank: " << max_rank << std::endl;
+    std::cout << "roots size: " << roots.size() << std::endl;
+    for (auto *root : roots) {
+        if (!root) {
+            continue;
+        }
+        std::queue<Node *> nodes_to_print;
+        nodes_to_print.push(root);
+        while (!nodes_to_print.empty()) {
+            Node *node = nodes_to_print.front();
+            nodes_to_print.pop();
+            std::cout << "Node " << node->id << " has distance "
+                << node->distance_to_S << " rank: " << node->rank << "\n  ";
+            for (auto *child : node->children) {
+                nodes_to_print.push(child);
+            }
+        }
+    }
+    std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n";
+  }
 };
 
 class DFSDeque : public PriorityStructure {
@@ -290,10 +362,11 @@ public:
 void run_one_iter(Graph &graph, PriorityStructure *heap) {
 
   Node *closest_node = nullptr;
+
   while ((!closest_node || closest_node->visited) && !heap->is_empty()) {
     closest_node = heap->pop_min();
-    std::cout << "potential closest node: " << closest_node->id
-              << "address: " << closest_node << std::endl;
+    // std::cout << "potential closest node: " << closest_node->id
+    //           << "address: " << closest_node << std::endl;
   }
   if (closest_node->visited) {
     return;
@@ -315,7 +388,6 @@ void run_one_iter(Graph &graph, PriorityStructure *heap) {
       heap->decrease_key(neighbor, distance);
     }
   }
-  // this->heap->print_heap();
 }
 
 std::pair<size_t, size_t> run_dijkstras(Graph &graph, PriorityStructure *heap) {
@@ -363,7 +435,7 @@ int main() {
     node->print_node();
   }
   // and test with each heap type
-  std::vector<PriorityStructure *> heaps = {new Set(), new PriorityQueue(),
+  std::vector<PriorityStructure *> heaps = {new Set(), new PriorityQueue(), new FibonacciHeap(),
                                             new DFSDeque(), new BFSDeque()};
   for (auto *heap : heaps) {
     Graph graph(num_nodes, edges);
