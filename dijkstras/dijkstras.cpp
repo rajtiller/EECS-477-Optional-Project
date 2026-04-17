@@ -106,7 +106,10 @@ public:
 
   void insert(Node *node) override { pq.push(node); }
 
-  void decrease_key(Node *node, size_t new_val) override { pq.push(node); }
+  void decrease_key(Node *node, size_t new_val) override { 
+    node->distance_to_S = new_val;
+    pq.push(node); 
+}
 
   bool is_empty() const override { return pq.empty(); }
 
@@ -164,8 +167,12 @@ public:
     }
     roots[min_node->rank] = nullptr;
     if (min_node->rank == max_rank) {
-      max_rank--;
-      roots.pop_back();
+        size_t new_max_rank = max_rank;
+        while (roots[new_max_rank] == nullptr) {
+            new_max_rank--;
+            roots.pop_back();
+        }
+        max_rank = new_max_rank;
     }
     std::vector<Node *> new_roots = min_node->children;
     min_node->children.clear();
@@ -237,13 +244,16 @@ public:
     print_heap("before decreasing key of node " + std::to_string(node->id));
     
     std::stack<Node *> removed_nodes;
-    while (node->parent && node->parent->marked) {
-      removed_nodes.push(node->parent);
-      node->parent->children.erase(std::find(node->parent->children.begin(), node->parent->children.end(), node));
-        // make sure above line works
-      node->parent->rank-=2; // i think this is correct but we need to test it
-      node = node->parent;
-    }
+    do {
+        node->rank=std::max(0, node->rank-2); // i think this is correct but we need to test it
+        removed_nodes.push(node);
+        if (node->parent){
+            node->parent->children.erase(std::find(node->parent->children.begin(), node->parent->children.end(), node));
+                // make sure above line works
+            node = node->parent;
+        }
+    }  while (node->parent && node->parent->marked);
+    // at this point node is the last deleted node
     if (node->parent) {
         node->parent->marked = true;
         node->parent->children.erase(std::find(node->parent->children.begin(), node->parent->children.end(), node));
@@ -251,6 +261,13 @@ public:
     } else {
         assert(roots[node->rank] == node);
         roots[node->rank] = nullptr;
+        size_t new_max_rank = max_rank;
+        assert(max_rank == roots.size() - 1);
+        while (roots[new_max_rank] == nullptr) {
+            new_max_rank--;
+            roots.pop_back();
+        }
+        max_rank = new_max_rank;
     }
 
     while (!removed_nodes.empty()) {
