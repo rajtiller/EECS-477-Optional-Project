@@ -167,8 +167,9 @@ public:
     }
     roots[min_node->rank] = nullptr;
     if (min_node->rank == max_rank) {
-        size_t new_max_rank = max_rank;
-        while (roots[new_max_rank] == nullptr) {
+        assert(max_rank == static_cast<int>(roots.size()) - 1);
+        int new_max_rank = max_rank;
+        while (new_max_rank >= 0 && roots[new_max_rank] == nullptr) {
             new_max_rank--;
             roots.pop_back();
         }
@@ -181,36 +182,10 @@ public:
     min_node->parent = nullptr;
     for (size_t i = 0; i < new_roots.size(); i++) {
         new_roots[i]->parent = nullptr;
-    }
-    Node *carry = nullptr;
-    for (int i = 0; i <= max_rank; i++) { // there might be a fence post error here
-      if (roots[i] && new_roots.size() > i && new_roots[i]) {
-        assert(roots[i]->rank == i);
-        assert(new_roots[i]->rank == i);
-        Node *temp = Merge(roots[i], new_roots[i]);
-        roots[i] = carry;
-        carry = temp;
-      } else if (roots[i] && carry) {
-        carry = Merge(roots[i], carry);
-        roots[i] = nullptr;
-      } else if (new_roots.size() > i && new_roots[i] && carry) {
-        carry = Merge(new_roots[i], carry);
-      } else if (carry) {
-        roots[i] = carry;
-      } else if (new_roots.size() > i && new_roots[i]) {
-        roots[i] = new_roots[i];
-      } else {
-        roots[i] = roots[i]; // keep it as is
-      }
-    }
-    if (carry) {
-        assert(carry->rank == max_rank + 1);
-        roots.push_back(carry);
-        max_rank++;
+        insert(new_roots[i]);
     }
     print_heap("after popping min node");
     return min_node;
-    // FINISH THIS!!!
   }
 
   void insert(Node *node) override {
@@ -222,10 +197,9 @@ public:
     Node *carry = node;
     while (true) {
         assert(carry);
-        assert(carry->rank <= max_rank + 1); // we can make this stronger later
       if (carry->rank > max_rank) {
+        roots.resize(carry->rank + 1, nullptr); // i hope this works
         max_rank = carry->rank;
-        roots.push_back(nullptr);
       }
       if (roots[carry->rank] == nullptr) {
         roots[carry->rank] = carry;
@@ -239,31 +213,41 @@ public:
   }
 
   void decrease_key(Node *node, size_t new_val) override {
+    std::string node_id = std::to_string(node->id);
+    print_heap("before decreasing key of node " + node_id);
     node->distance_to_S = new_val;
 
-    print_heap("before decreasing key of node " + std::to_string(node->id));
-    
     std::stack<Node *> removed_nodes;
-    do {
-        node->rank=std::max(0, node->rank-2); // i think this is correct but we need to test it
-        removed_nodes.push(node);
-        if (node->parent){
-            node->parent->children.erase(std::find(node->parent->children.begin(), node->parent->children.end(), node));
-                // make sure above line works
-            node = node->parent;
+    Node * node_to_be_removed = node;
+    removed_nodes.push(node_to_be_removed);
+    while (true) {
+        // adjust current node then update it if it's parent is marked
+        if (node_to_be_removed != node) {
+            node_to_be_removed->rank=std::max(0, node_to_be_removed->rank-2); // i think this is correct but we need to test it
         }
-    }  while (node->parent && node->parent->marked);
-    // at this point node is the last deleted node
-    if (node->parent) {
-        node->parent->marked = true;
-        node->parent->children.erase(std::find(node->parent->children.begin(), node->parent->children.end(), node));
-        // make sure above line works
+        if (node_to_be_removed->parent){
+            node_to_be_removed->parent->children.erase(std::find(node_to_be_removed->parent->children.begin(), node_to_be_removed->parent->children.end(), node_to_be_removed));
+                // make sure above line works
+                if (node_to_be_removed->parent->marked) {
+                    node_to_be_removed = node_to_be_removed->parent;
+                    continue;
+                }
+        }
+        break;
+    } 
+    // at this point node_to_be_removed is the last removed node
+    if (node_to_be_removed->parent) {
+        assert(node_to_be_removed->parent->marked == false);
+        node_to_be_removed->parent->marked = true;
     } else {
-        assert(roots[node->rank] == node);
-        roots[node->rank] = nullptr;
-        size_t new_max_rank = max_rank;
-        assert(max_rank == roots.size() - 1);
-        while (roots[new_max_rank] == nullptr) {
+        if (roots[node_to_be_removed->rank] != node_to_be_removed) {
+            std::cout <<"expected id: " << node_to_be_removed->id << " but got id: " << roots[node_to_be_removed->rank]->id << std::endl;
+        }
+        assert(roots[node_to_be_removed->rank] == node_to_be_removed);
+        roots[node_to_be_removed->rank] = nullptr;
+        int new_max_rank = max_rank;
+        assert(max_rank == static_cast<int>(roots.size()) - 1);
+        while (new_max_rank >= 0 && roots[new_max_rank] == nullptr) {
             new_max_rank--;
             roots.pop_back();
         }
@@ -273,38 +257,38 @@ public:
     while (!removed_nodes.empty()) {
       Node *removed_node = removed_nodes.top();
       removed_nodes.pop();
+      removed_node->parent = nullptr;
       removed_node->marked = false;
       insert(removed_node);
     }
-    print_heap("after decreasing key of node " + std::to_string(node->id));
+    print_heap("after decreasing key of node " + node_id);
   }
 
   bool is_empty() const override { return roots.empty(); }
-
-
   void print_heap() override {}
   void print_heap(std::string message) {
-    std::cout << "*************************\n";
-    std::cout << message << std::endl;
-    std::cout << "max_rank: " << max_rank << std::endl;
-    std::cout << "roots size: " << roots.size() << std::endl;
-    for (auto *root : roots) {
-        if (!root) {
-            continue;
-        }
-        std::queue<Node *> nodes_to_print;
-        nodes_to_print.push(root);
-        while (!nodes_to_print.empty()) {
-            Node *node = nodes_to_print.front();
-            nodes_to_print.pop();
-            std::cout << "Node " << node->id << " has distance "
-                << node->distance_to_S << " rank: " << node->rank << "\n  ";
-            for (auto *child : node->children) {
-                nodes_to_print.push(child);
-            }
-        }
-    }
-    std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n";
+    // std::cout << "*************************\n";
+    // std::cout << message << std::endl;
+    // std::cout << "max_rank: " << max_rank << std::endl;
+    // std::cout << "roots size: " << roots.size() << std::endl;
+    // for (auto *root : roots) {
+    //     if (!root) {
+    //         continue;
+    //     }
+    //     std::queue<Node *> nodes_to_print;
+    //     nodes_to_print.push(root);
+    //     while (!nodes_to_print.empty()) {
+    //         Node *node = nodes_to_print.front();
+    //         nodes_to_print.pop();
+    //         std::cout << "Node " << node->id  << (node->marked ? " (X)" : "") << " has distance "
+    //             << node->distance_to_S << " rank: " << node->rank << "\n  ";
+    //         for (auto *child : node->children) {
+    //             nodes_to_print.push(child);
+    //         }
+    //     }
+    //     std::cout << "\n";
+    // }
+    // std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n";
   }
 };
 
@@ -408,11 +392,13 @@ void run_one_iter(Graph &graph, PriorityStructure *heap) {
 }
 
 std::pair<size_t, size_t> run_dijkstras(Graph &graph, PriorityStructure *heap) {
+    std::cout << "running dijkstras with heap: " << heap->name() << std::endl;
   graph.nodes[0]->distance_to_S = 0;
   heap->insert(graph.nodes[0]);
   while (!heap->is_empty()) {
     run_one_iter(graph, heap);
   }
+  std::cout << "--------------------------------" << std::endl;
   return std::make_pair(graph.total_distance, graph.num_nodes_visited);
 }
 
@@ -427,7 +413,7 @@ generate_edges(size_t num_nodes, double edge_density) {
 
       std::random_device rd;
       std::mt19937 gen(rd());
-      size_t weight = std::uniform_int_distribution<size_t>(0, 9)(gen);
+      size_t weight = std::uniform_int_distribution<size_t>(0, 100)(gen);
       if (std::uniform_real_distribution<double>(0.0, 1.0)(gen) <
           edge_density) {
         edges.push_back(std::make_pair(i, std::make_pair(weight, j)));
