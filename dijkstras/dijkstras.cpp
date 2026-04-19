@@ -16,10 +16,10 @@ class Node {
     bool visited;
     std::vector<std::pair<size_t, Node *>> neighbors; // distance, node
     size_t distance_to_S;
-    Node *parent;                 // for fibonacci heap
-    std::vector<Node *> children; // for fibonacci heap
-    int rank;                     // for fibonacci heap
-    bool marked;                  // for fibonacci heap
+    Node *parent;              // for fibonacci heap
+    std::set<Node *> children; // for fibonacci heap
+    int rank;                  // for fibonacci heap
+    bool marked;               // for fibonacci heap
 
     void print_node() const {
         std::cout << "Node " << id << " has distance "
@@ -120,18 +120,18 @@ class PriorityQueue : public PriorityStructure {
         // }
     }
 
-    void print_heap(std::string message) {
-        // std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%\n";
-        // std::cout << message << std::endl;
-        // std::cout << "priority queue size: " << pq.size() << std::endl;
-        // auto new_pq = pq;
-        // while (!new_pq.empty()) {
-        //   std::cout << "Node " << new_pq.top()->id << " has distance "
-        //             << new_pq.top()->distance_to_S << "\n  ";
-        //   new_pq.pop();
-        // }
-        // std::cout << "*************************\n";
-    }
+    // void print_heap(std::string message) {
+    // std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%\n";
+    // std::cout << message << std::endl;
+    // std::cout << "priority queue size: " << pq.size() << std::endl;
+    // auto new_pq = pq;
+    // while (!new_pq.empty()) {
+    //   std::cout << "Node " << new_pq.top()->id << " has distance "
+    //             << new_pq.top()->distance_to_S << "\n  ";
+    //   new_pq.pop();
+    // }
+    // std::cout << "*************************\n";
+    // }
 };
 
 class FibonacciHeap : public PriorityStructure {
@@ -155,12 +155,12 @@ class FibonacciHeap : public PriorityStructure {
         }
         assert(a && b && a->rank == b->rank);
         if (a->distance_to_S < b->distance_to_S) {
-            a->children.push_back(b);
+            a->children.insert(b);
             b->parent = a;
             a->rank++;
             return a;
         } else {
-            b->children.push_back(a);
+            b->children.insert(a);
             a->parent = b;
             b->rank++;
             return b;
@@ -172,12 +172,15 @@ class FibonacciHeap : public PriorityStructure {
         size_t min_distance = std::numeric_limits<size_t>::max();
         Node *min_node = nullptr;
         for (auto *root : roots) {
-            if (root && root->distance_to_S < min_distance) {
+            if (root == nullptr) {
+                continue;
+            }
+            if (root->distance_to_S < min_distance) {
                 min_distance = root->distance_to_S;
                 min_node = root;
             }
         }
-        std::cout << "line 180 run" << std::endl;
+        assert(roots[min_node->rank] == min_node);
         roots[min_node->rank] = nullptr;
         if (min_node->rank == max_rank) {
             assert(max_rank == static_cast<int>(roots.size()) - 1);
@@ -188,19 +191,16 @@ class FibonacciHeap : public PriorityStructure {
             }
             max_rank = new_max_rank;
         }
-        std::cout << "line 191 run" << std::endl;
-        std::vector<Node *> new_roots = min_node->children;
+        std::set<Node *> new_roots = min_node->children;
         min_node->children.clear();
         min_node->marked = false;
-        min_node->rank = 0;
+        min_node->rank = -1;
         min_node->parent = nullptr;
-        for (size_t i = 0; i < new_roots.size(); i++) {
-            if (new_roots[i] == nullptr) {
-                continue;
-            }
-            assert(new_roots[i]->parent == min_node);
-            new_roots[i]->parent = nullptr;
-            insert(new_roots[i]);
+        for (auto *root : new_roots) {
+            assert(root != nullptr);
+            assert(root->parent == min_node);
+            root->parent = nullptr;
+            insert(root);
         }
         print_heap("after popping min node");
         return min_node;
@@ -211,6 +211,7 @@ class FibonacciHeap : public PriorityStructure {
         // node->marked = false;
         // node->children.clear();
         // node->rank = 0;
+        assert(node->rank > -1);
         print_heap("before inserting node " + std::to_string(node->id) +
                    " rank: " + std::to_string(node->rank));
         Node *carry = node;
@@ -234,6 +235,7 @@ class FibonacciHeap : public PriorityStructure {
     void decrease_key(Node *node, size_t new_val) override {
         std::string node_id = std::to_string(node->id);
         print_heap("before decreasing key of node " + node_id);
+        assert(node->rank > -1);
         assert(node->visited == false);
         node->distance_to_S = new_val;
 
@@ -242,30 +244,52 @@ class FibonacciHeap : public PriorityStructure {
         std::cout << "line 242 run" << std::endl;
         while (true) {
             // we're at a node we're goin to remove
+            assert(node_to_be_removed != nullptr);
             removed_nodes.push(node_to_be_removed);
-            size_t original_rank = node_to_be_removed->rank;
             if (node_to_be_removed != node) {
                 node_to_be_removed->rank -= 2; // i think this is correct but we need to test it
+                node_to_be_removed->marked = false;
                 assert(node_to_be_removed->rank >= 0);
             }
+            std::cout << "line 250 run" << std::endl;
             if (node_to_be_removed->parent) {
-                if (node_to_be_removed != node_to_be_removed->parent->children[original_rank]) {
-                    std::cout << "expected id: " << node_to_be_removed->id << " but got id: "
-                              << node_to_be_removed->parent->children[original_rank]->id
-                              << std::endl;
-                }
-                assert(node_to_be_removed == node_to_be_removed->parent->children[original_rank]);
-                node_to_be_removed->parent->children[original_rank] = nullptr;
-                // make sure above line works
+                assert(node_to_be_removed->parent->children.find(node_to_be_removed) !=
+                       node_to_be_removed->parent->children.end());
+                node_to_be_removed->parent->children.erase(node_to_be_removed);
+                std::cout << "line 258 run" << std::endl;
+                // marked nodes
                 if (node_to_be_removed->parent->marked) {
+                    std::cout << "line 262 run" << std::endl;
                     node_to_be_removed = node_to_be_removed->parent;
+                    std::cout << "line 264 run" << std::endl;
+                    if ((node_to_be_removed->parent->children.size() + 2) !=
+                        static_cast<size_t>(node_to_be_removed->parent->rank)) {
+                        std::cout << "line 265 run" << std::endl;
+                        std::cout << "children size: "
+                                  << node_to_be_removed->parent->children.size() << std::endl;
+                        std::cout << "rank: " << node_to_be_removed->parent->rank << std::endl;
+                    }
+                    assert((node_to_be_removed->parent->children.size() + 2) ==
+                           static_cast<size_t>(node_to_be_removed->parent->rank));
+                    std::cout << "line 267 run" << std::endl;
                     continue;
+                } else {
+                    std::cout << "line 266 run" << std::endl;
+                    if ((node_to_be_removed->parent->children.size() + 1) !=
+                        static_cast<size_t>(node_to_be_removed->parent->rank)) {
+                        std::cout << "line 268 run" << std::endl;
+                        std::cout << "children size: "
+                                  << node_to_be_removed->parent->children.size() << std::endl;
+                        std::cout << "rank: " << node_to_be_removed->parent->rank << std::endl;
+                    }
+                    assert((node_to_be_removed->parent->children.size() + 1) ==
+                           static_cast<size_t>(node_to_be_removed->parent->rank));
                 }
             }
             break;
         }
-        std::cout << "line 267 run" << std::endl;
         // at this point node_to_be_removed is the last removed node
+        std::cout << "line 273 run" << std::endl;
         if (node_to_be_removed->parent) {
             assert(node_to_be_removed->parent->marked == false);
             node_to_be_removed->parent->marked = true;
@@ -289,12 +313,11 @@ class FibonacciHeap : public PriorityStructure {
             }
             max_rank = new_max_rank;
         }
-        std::cout << "line 292 run" << std::endl;
+        std::cout << "line 297 run" << std::endl;
         while (!removed_nodes.empty()) {
             Node *removed_node = removed_nodes.top();
             removed_nodes.pop();
             removed_node->parent = nullptr;
-            removed_node->marked = false;
             insert(removed_node);
         }
         print_heap("after decreasing key of node " + node_id);
@@ -323,10 +346,9 @@ class FibonacciHeap : public PriorityStructure {
                 std::cout << "Node " << node->id << (node->marked ? " (X)" : "") << " has distance "
                           << node->distance_to_S << " rank: " << node->rank << "\n  ";
                 for (auto it = node->children.rbegin(); it != node->children.rend(); ++it) {
+                    assert(it != node->children.rend());
                     Node *child = *it;
-                    if (child == nullptr) {
-                        continue;
-                    }
+                    assert(child != nullptr);
                     nodes_to_print.push(std::make_pair(child, current_depth + 1));
                 }
             }
