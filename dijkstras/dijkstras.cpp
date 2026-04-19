@@ -1,9 +1,13 @@
+#include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <limits>
 #include <random>
 #include <set>
+#include <unordered_set>
 #include <vector>
 
 class Node {
@@ -20,6 +24,7 @@ class Node {
     std::set<Node *> children; // for fibonacci heap
     int rank;                  // for fibonacci heap
     bool marked;               // for fibonacci heap
+    size_t marks;              // for fibonacci heap with marks
 
     void print_node() const {
         // std::cout << "Node " << id << " has distance "
@@ -351,6 +356,212 @@ class FibonacciHeap : public PriorityStructure {
     }
 };
 
+class FibonacciHeapWithMarks : public PriorityStructure {
+  public:
+    std::vector<Node *> roots;
+    size_t marks_allowed = 5;
+    int max_rank = -1; // -1 because we start at 0 and increment
+    std::string name() const override { return "fibonacci heap with 5 marks"; }
+    struct FibonacciHeapComparator {
+        bool operator()(const Node *a, const Node *b) const {
+            if (a->distance_to_source != b->distance_to_source) {
+                return a->distance_to_source < b->distance_to_source;
+            }
+            return a->id < b->id;
+        }
+    };
+
+    Node *Merge(Node *a, Node *b) {
+        if (!(a && b && a->rank == b->rank)) {
+            std::cout << "Merge error: a: " << a->id << " b: " << b->id << " a->rank: " << a->rank
+                      << " b->rank: " << b->rank << std::endl;
+        }
+        assert(a && b && a->rank == b->rank);
+        if (a->distance_to_source < b->distance_to_source) {
+            a->children.insert(b);
+            b->parent = a;
+            a->rank++;
+            return a;
+        } else {
+            b->children.insert(a);
+            a->parent = b;
+            b->rank++;
+            return b;
+        }
+    }
+
+    Node *pop_min() override {
+        // print_heap("before popping min node");
+        size_t min_distance = std::numeric_limits<size_t>::max();
+        Node *min_node = nullptr;
+        for (auto *root : roots) {
+            if (root == nullptr) {
+                continue;
+            }
+            if (root->distance_to_source < min_distance) {
+                min_distance = root->distance_to_source;
+                min_node = root;
+            }
+        }
+        assert(roots[min_node->rank] == min_node);
+        roots[min_node->rank] = nullptr;
+        if (min_node->rank == max_rank) {
+            assert(max_rank == static_cast<int>(roots.size()) - 1);
+            int new_max_rank = max_rank;
+            while (new_max_rank >= 0 && roots[new_max_rank] == nullptr) {
+                new_max_rank--;
+                roots.pop_back();
+            }
+            max_rank = new_max_rank;
+        }
+        std::set<Node *> new_roots = min_node->children;
+        min_node->children.clear();
+        min_node->marks = 0;
+        min_node->rank = -1;
+        min_node->parent = nullptr;
+        for (auto *root : new_roots) {
+            assert(root != nullptr);
+            assert(root->parent == min_node);
+            root->parent = nullptr;
+            insert(root);
+        }
+        // print_heap("after popping min node");
+        return min_node;
+    }
+
+    void insert_multiple(std::vector<Node *> nodes) {
+        for (auto *node : nodes) {
+            insert(node);
+        }
+    }
+
+    void insert(Node *node) override {
+        // node->parent = nullptr; // removing these so we can use insert in decrease_key
+        // node->marked = false;
+        // node->children.clear();
+        // node->rank = 0;
+        assert(node->rank > -1);
+        // print_heap("before inserting node " + std::to_string(node->id) +
+        //            " rank: " + std::to_string(node->rank));
+        Node *carry = node;
+        while (true) {
+            assert(carry);
+            if (carry->rank > max_rank) {
+                roots.resize(carry->rank + 1, nullptr); // i hope this works
+                max_rank = carry->rank;
+            }
+            if (roots[carry->rank] == nullptr) {
+                roots[carry->rank] = carry;
+                break;
+            }
+            Node *temp = roots[carry->rank];
+            roots[carry->rank] = nullptr;
+            carry = Merge(temp, carry); // this should update the rank of carry
+        }
+        // print_heap("after inserting node " + std::to_string(node->id));
+    }
+
+    void decrease_key(Node *node, size_t new_val) override {
+        std::string node_id = std::to_string(node->id);
+        // print_heap("before decreasing key of node " + node_id);
+        assert(node->rank > -1);
+        assert(node->visited == false);
+        node->distance_to_source = new_val;
+
+        std::stack<Node *> removed_nodes;
+        Node *node_to_be_removed = node;
+        while (true) {
+            // we're at a node we're goin to remove
+            assert(node_to_be_removed != nullptr);
+            removed_nodes.push(node_to_be_removed);
+            if (node_to_be_removed != node) {
+                node_to_be_removed->rank -=
+                    (marks_allowed + 1); // i think this is correct but we need to test it
+                node_to_be_removed->marks = 0;
+                assert(node_to_be_removed->rank >= 0);
+            }
+            if (node_to_be_removed->parent) {
+                assert(node_to_be_removed->parent->children.find(node_to_be_removed) !=
+                       node_to_be_removed->parent->children.end());
+                node_to_be_removed->parent->children.erase(node_to_be_removed);
+                // marked nodes
+                if (node_to_be_removed->parent->marks >= marks_allowed) {
+                    //   assert((node_to_be_removed->parent->children.size() + 2) ==
+                    //          static_cast<size_t>(node_to_be_removed->parent->rank));
+                    node_to_be_removed = node_to_be_removed->parent;
+                    continue;
+                } else {
+                    // assert((node_to_be_removed->parent->children.size() + 1) ==
+                    //        static_cast<size_t>(node_to_be_removed->parent->rank));
+                }
+            }
+            break;
+        }
+        // at this point node_to_be_removed is the last removed node
+        if (node_to_be_removed->parent) {
+            assert(node_to_be_removed->parent->marks < marks_allowed);
+            node_to_be_removed->parent->marks++;
+        } else {
+            size_t former_rank = node_to_be_removed->rank + (marks_allowed + 1);
+            if (node_to_be_removed == node) {
+                former_rank = node_to_be_removed->rank;
+            }
+            assert(roots[former_rank] == node_to_be_removed);
+            // +2 above because we subtracted 2 from the rank when we removed the node
+            roots[former_rank] = nullptr;
+            int new_max_rank = max_rank;
+            assert(max_rank == static_cast<int>(roots.size()) - 1);
+            while (new_max_rank >= 0 && roots[new_max_rank] == nullptr) {
+                new_max_rank--;
+                roots.pop_back();
+            }
+            max_rank = new_max_rank;
+        }
+        while (!removed_nodes.empty()) {
+            Node *removed_node = removed_nodes.top();
+            removed_nodes.pop();
+            removed_node->parent = nullptr;
+            insert(removed_node);
+        }
+        // print_heap("after decreasing key of node " + node_id);
+    }
+
+    bool is_empty() const override { return roots.empty(); }
+    void print_heap() override {}
+    void print_heap(std::string message) {
+        //     std::cout << "*************************\n";
+        //     std::cout << message << std::endl;
+        //     std::cout << "max_rank: " << max_rank << std::endl;
+        //     std::cout << "roots size: " << roots.size() << std::endl;
+        //     for (auto *root : roots) {
+        //         if (!root) {
+        //             continue;
+        //         }
+        //         std::stack<std::pair<Node *, size_t>> nodes_to_print; // node, depth
+        //         nodes_to_print.push(std::make_pair(root, 0));
+        //         while (!nodes_to_print.empty()) {
+        //             Node *node = nodes_to_print.top().first;
+        //             size_t current_depth = nodes_to_print.top().second;
+        //             nodes_to_print.pop();
+        //             for (size_t i = 0; i < current_depth; i++) {
+        //                 std::cout << " ";
+        //             }
+        //             std::cout << "Node " << node->id << (node->marked ? " (X)" : "") << " has
+        //             distance "
+        //                       << node->distance_to_S << " rank: " << node->rank << "\n  ";
+        //             for (auto it = node->children.rbegin(); it != node->children.rend(); ++it) {
+        //                 assert(it != node->children.rend());
+        //                 Node *child = *it;
+        //                 assert(child != nullptr);
+        //                 nodes_to_print.push(std::make_pair(child, current_depth + 1));
+        //             }
+        //         }
+        //         std::cout << "\n";
+        //     }
+        //     std::cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n";
+    }
+};
+
 class DFSDeque : public PriorityStructure {
   public:
     std::string name() const override { return "DFS"; }
@@ -462,24 +673,75 @@ std::pair<size_t, size_t> run_dijkstras(Graph &graph, PriorityStructure *heap) {
     return std::make_pair(graph.total_distance, graph.num_nodes_visited);
 }
 
-std::vector<std::pair<size_t, std::pair<size_t, size_t>>> generate_edges(size_t num_nodes,
-                                                                         double edge_density) {
-    std::vector<std::pair<size_t, std::pair<size_t, size_t>>> edges;
+void generate_edges(size_t num_nodes, double edge_density,
+                    std::vector<std::pair<size_t, std::pair<size_t, size_t>>> &edges,
+                    std::mt19937 &gen) {
+    edges.clear();
+    if (num_nodes <= 1) {
+        return;
+    }
+
+    const size_t max_edges = num_nodes * (num_nodes - 1);
+    if (edge_density >= 1.0) {
+        edges.reserve(max_edges);
+        std::uniform_int_distribution<size_t> weight_dis(0, 100);
+        for (size_t i = 0; i < num_nodes; i++) {
+            for (size_t j = 0; j < num_nodes; j++) {
+                if (i == j) {
+                    continue;
+                }
+                edges.push_back(std::make_pair(i, std::make_pair(weight_dis(gen), j)));
+            }
+        }
+        return;
+    }
+
+    const double expected =
+        edge_density * static_cast<double>(num_nodes) * static_cast<double>(num_nodes - 1);
+    size_t target = static_cast<size_t>(std::llround(expected));
+
+    std::uniform_int_distribution<size_t> weight_dis(0, 100);
+    std::uniform_int_distribution<size_t> u_dis(0, num_nodes - 1);
+    std::uniform_int_distribution<size_t> v_dis(0, num_nodes - 2);
+
+    // Sparse graphs: sample unique directed pairs in ~O(target) instead of O(n^2).
+    if (target * 4 < max_edges) {
+        edges.reserve(target);
+        std::unordered_set<std::uint64_t> seen;
+        seen.reserve(static_cast<size_t>(target * 1.3) + 1);
+
+        auto encode = [](size_t u, size_t v) -> std::uint64_t {
+            return (static_cast<std::uint64_t>(u) << 32) ^ static_cast<std::uint64_t>(v);
+        };
+
+        while (edges.size() < target) {
+            size_t u = u_dis(gen);
+            size_t v = v_dis(gen);
+            if (v >= u) {
+                v++;
+            }
+            const std::uint64_t key = encode(u, v);
+            if (!seen.insert(key).second) {
+                continue;
+            }
+            edges.push_back(std::make_pair(u, std::make_pair(weight_dis(gen), v)));
+        }
+        return;
+    }
+
+    // Dense graphs: still O(n^2), but one Bernoulli draw per pair + reserve cuts overhead.
+    edges.reserve(target);
+    std::bernoulli_distribution edge_dis(edge_density);
     for (size_t i = 0; i < num_nodes; i++) {
         for (size_t j = 0; j < num_nodes; j++) {
             if (i == j) {
                 continue;
             }
-
-            std::random_device rd;
-            std::mt19937 gen(rd());
-            size_t weight = std::uniform_int_distribution<size_t>(0, 100)(gen);
-            if (std::uniform_real_distribution<double>(0.0, 1.0)(gen) < edge_density) {
-                edges.push_back(std::make_pair(i, std::make_pair(weight, j)));
+            if (edge_dis(gen)) {
+                edges.push_back(std::make_pair(i, std::make_pair(weight_dis(gen), j)));
             }
         }
     }
-    return edges;
 }
 
 int main() {
@@ -491,20 +753,28 @@ int main() {
 
     //   size_t num_nodes = 7;
     //   double edge_density = 0.3;
+    std::random_device rd;
+    std::mt19937 gen(rd());
     for (double edge_density = 0.1; edge_density <= 1; edge_density += 0.45) {
-        for (size_t num_nodes = 10; num_nodes <= 1000; num_nodes *= 2) {
-            auto edges = generate_edges(num_nodes, edge_density);
+        for (size_t num_nodes = 10; num_nodes <= 10000; num_nodes *= 1.1) {
+
+            std::cout << "time to generate edges: " << std::endl;
+            auto start = std::chrono::steady_clock::now();
+            std::vector<std::pair<size_t, std::pair<size_t, size_t>>> edges;
+            generate_edges(num_nodes, edge_density, edges, gen);
+            auto end = std::chrono::steady_clock::now();
+            double seconds = std::chrono::duration<double>(end - start).count();
+            std::cout << seconds;
+
             Graph graph_1(num_nodes, edges);
-            for (auto *node : graph_1.nodes) {
-                node->print_node();
-            }
             // and test with each heap type
-            std::vector<PriorityStructure *> heaps = {new Set(), new PriorityQueue(),
-                                                      new FibonacciHeap(), new DFSDeque(),
-                                                      new BFSDeque()};
+            std::vector<PriorityStructure *> heaps = {
+                new Set(),           new PriorityQueue(),
+                new FibonacciHeap(), new FibonacciHeapWithMarks(),
+                new DFSDeque(),      new BFSDeque()};
             for (auto *heap : heaps) {
-                Graph graph(num_nodes, edges);
                 auto start = std::chrono::steady_clock::now();
+                Graph graph(num_nodes, edges);
                 auto total_distance = run_dijkstras(graph, heap);
                 auto end = std::chrono::steady_clock::now();
                 double seconds = std::chrono::duration<double>(end - start).count();
