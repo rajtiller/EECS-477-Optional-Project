@@ -181,7 +181,7 @@ class FibonacciHeap : public PriorityStructure {
     }
 
     Node *pop_min() override {
-        print_heap("before popping min node");
+        // print_heap("before popping min node");
         size_t min_distance = std::numeric_limits<size_t>::max();
         Node *min_node = nullptr;
         for (auto *root : roots) {
@@ -215,8 +215,14 @@ class FibonacciHeap : public PriorityStructure {
             root->parent = nullptr;
             insert(root);
         }
-        print_heap("after popping min node");
+        // print_heap("after popping min node");
         return min_node;
+    }
+
+    void insert_multiple(std::vector<Node *> nodes) {
+        for (auto *node : nodes) {
+            insert(node);
+        }
     }
 
     void insert(Node *node) override {
@@ -225,8 +231,8 @@ class FibonacciHeap : public PriorityStructure {
         // node->children.clear();
         // node->rank = 0;
         assert(node->rank > -1);
-        print_heap("before inserting node " + std::to_string(node->id) +
-                   " rank: " + std::to_string(node->rank));
+        // print_heap("before inserting node " + std::to_string(node->id) +
+        //            " rank: " + std::to_string(node->rank));
         Node *carry = node;
         while (true) {
             assert(carry);
@@ -242,12 +248,12 @@ class FibonacciHeap : public PriorityStructure {
             roots[carry->rank] = nullptr;
             carry = Merge(temp, carry); // this should update the rank of carry
         }
-        print_heap("after inserting node " + std::to_string(node->id));
+        // print_heap("after inserting node " + std::to_string(node->id));
     }
 
     void decrease_key(Node *node, size_t new_val) override {
         std::string node_id = std::to_string(node->id);
-        print_heap("before decreasing key of node " + node_id);
+        // print_heap("before decreasing key of node " + node_id);
         assert(node->rank > -1);
         assert(node->visited == false);
         node->distance_to_source = new_val;
@@ -306,7 +312,7 @@ class FibonacciHeap : public PriorityStructure {
             removed_node->parent = nullptr;
             insert(removed_node);
         }
-        print_heap("after decreasing key of node " + node_id);
+        // print_heap("after decreasing key of node " + node_id);
     }
 
     bool is_empty() const override { return roots.empty(); }
@@ -446,13 +452,13 @@ void run_one_iter(Graph &graph, PriorityStructure *heap) {
 }
 
 std::pair<size_t, size_t> run_dijkstras(Graph &graph, PriorityStructure *heap) {
-    std::cout << "running dijkstras with heap: " << heap->name() << std::endl;
+    // std::cout << "running dijkstras with heap: " << heap->name() << std::endl;
     graph.nodes[0]->distance_to_source = 0;
     heap->insert(graph.nodes[0]);
     while (!heap->is_empty()) {
         run_one_iter(graph, heap);
     }
-    std::cout << "--------------------------------" << std::endl;
+    // std::cout << "--------------------------------" << std::endl;
     return std::make_pair(graph.total_distance, graph.num_nodes_visited);
 }
 
@@ -485,7 +491,7 @@ int main() {
 
     //   size_t num_nodes = 7;
     //   double edge_density = 0.3;
-    for (double edge_density = 0.1; edge_density <= 1; edge_density += 0.1) {
+    for (double edge_density = 0.1; edge_density <= 1; edge_density += 0.45) {
         for (size_t num_nodes = 10; num_nodes <= 1000; num_nodes *= 2) {
             auto edges = generate_edges(num_nodes, edge_density);
             Graph graph_1(num_nodes, edges);

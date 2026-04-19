@@ -2,3 +2,5 @@ command -v clang-format >/dev/null && clang-format -i "/Users/rajtiller/Source/E
 make clean
 make
 ./dijkstras
+source .venv/bin/activate
+python visualize_dijkstras.py
