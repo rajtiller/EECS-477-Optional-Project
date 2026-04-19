@@ -35,11 +35,11 @@ for i, density in enumerate(densities):
                 label=category
             )
 
-        ax.set_xscale("log")
+        ax.set_xscale("linear")
 
         # runtime plot should be log-log (important)
         if metric == "seconds":
-            ax.set_yscale("log")
+            ax.set_yscale("linear")
 
         ax.set_title(f"density={density}, {ylabel}")
         ax.set_xlabel("Num Nodes")

@@ -676,71 +676,49 @@ std::pair<size_t, size_t> run_dijkstras(Graph &graph, PriorityStructure *heap) {
 void generate_edges(size_t num_nodes, double edge_density,
                     std::vector<std::pair<size_t, std::pair<size_t, size_t>>> &edges,
                     std::mt19937 &gen) {
-    edges.clear();
-    if (num_nodes <= 1) {
-        return;
-    }
-
-    const size_t max_edges = num_nodes * (num_nodes - 1);
-    if (edge_density >= 1.0) {
-        edges.reserve(max_edges);
-        std::uniform_int_distribution<size_t> weight_dis(0, 100);
-        for (size_t i = 0; i < num_nodes; i++) {
-            for (size_t j = 0; j < num_nodes; j++) {
-                if (i == j) {
-                    continue;
-                }
-                edges.push_back(std::make_pair(i, std::make_pair(weight_dis(gen), j)));
-            }
-        }
-        return;
-    }
-
-    const double expected =
-        edge_density * static_cast<double>(num_nodes) * static_cast<double>(num_nodes - 1);
-    size_t target = static_cast<size_t>(std::llround(expected));
-
-    std::uniform_int_distribution<size_t> weight_dis(0, 100);
-    std::uniform_int_distribution<size_t> u_dis(0, num_nodes - 1);
-    std::uniform_int_distribution<size_t> v_dis(0, num_nodes - 2);
-
-    // Sparse graphs: sample unique directed pairs in ~O(target) instead of O(n^2).
-    if (target * 4 < max_edges) {
-        edges.reserve(target);
-        std::unordered_set<std::uint64_t> seen;
-        seen.reserve(static_cast<size_t>(target * 1.3) + 1);
-
-        auto encode = [](size_t u, size_t v) -> std::uint64_t {
-            return (static_cast<std::uint64_t>(u) << 32) ^ static_cast<std::uint64_t>(v);
-        };
-
-        while (edges.size() < target) {
-            size_t u = u_dis(gen);
-            size_t v = v_dis(gen);
-            if (v >= u) {
-                v++;
-            }
-            const std::uint64_t key = encode(u, v);
-            if (!seen.insert(key).second) {
-                continue;
-            }
-            edges.push_back(std::make_pair(u, std::make_pair(weight_dis(gen), v)));
-        }
-        return;
-    }
-
-    // Dense graphs: still O(n^2), but one Bernoulli draw per pair + reserve cuts overhead.
-    edges.reserve(target);
-    std::bernoulli_distribution edge_dis(edge_density);
     for (size_t i = 0; i < num_nodes; i++) {
         for (size_t j = 0; j < num_nodes; j++) {
             if (i == j) {
                 continue;
             }
-            if (edge_dis(gen)) {
-                edges.push_back(std::make_pair(i, std::make_pair(weight_dis(gen), j)));
+
+            if (std::uniform_real_distribution<double>(0.0, 1.0)(gen) < edge_density) {
+                size_t weight = std::uniform_int_distribution<size_t>(0, 100)(gen);
+                edges.push_back(std::make_pair(i, std::make_pair(weight, j)));
             }
         }
+    }
+}
+
+void generate_edges_unweighted(size_t num_nodes, double edge_density,
+                               std::vector<std::pair<size_t, std::pair<size_t, size_t>>> &edges,
+                               std::mt19937 &gen) {
+    for (size_t i = 0; i < num_nodes; i++) {
+        for (size_t j = 0; j < num_nodes; j++) {
+            if (i == j) {
+                continue;
+            }
+            if (std::uniform_real_distribution<double>(0.0, 1.0)(gen) < edge_density) {
+                edges.push_back(std::make_pair(i, std::make_pair(1, j)));
+            }
+        }
+    }
+}
+
+void generate_edges_sparse(
+    size_t num_nodes, double edge_density,
+    std::vector<std::pair<size_t, std::pair<size_t, size_t>>> &edges,
+    std::mt19937 &gen) { // generate random vertices and add a directed edge between them
+    for (size_t i = 0; i < 5 * num_nodes; i++) {
+        size_t vertex_1 = std::uniform_int_distribution<size_t>(0, num_nodes - 1)(gen);
+        size_t vertex_2 = std::uniform_int_distribution<size_t>(0, num_nodes - 1)(gen);
+        while (vertex_1 == vertex_2) {
+            vertex_1 = std::uniform_int_distribution<size_t>(0, num_nodes - 1)(gen);
+            vertex_2 = std::uniform_int_distribution<size_t>(0, num_nodes - 1)(gen);
+        }
+        // pray for no dupes
+        size_t weight = std::uniform_int_distribution<size_t>(0, 100)(gen);
+        edges.push_back(std::make_pair(vertex_1, std::make_pair(weight, vertex_2)));
     }
 }
 
@@ -756,15 +734,10 @@ int main() {
     std::random_device rd;
     std::mt19937 gen(rd());
     for (double edge_density = 0.1; edge_density <= 1; edge_density += 0.45) {
-        for (size_t num_nodes = 10; num_nodes <= 10000; num_nodes *= 1.1) {
+        for (size_t num_nodes = 10; num_nodes <= 2000; num_nodes *= 1.1) {
 
-            std::cout << "time to generate edges: " << std::endl;
-            auto start = std::chrono::steady_clock::now();
             std::vector<std::pair<size_t, std::pair<size_t, size_t>>> edges;
             generate_edges(num_nodes, edge_density, edges, gen);
-            auto end = std::chrono::steady_clock::now();
-            double seconds = std::chrono::duration<double>(end - start).count();
-            std::cout << seconds;
 
             Graph graph_1(num_nodes, edges);
             // and test with each heap type
@@ -784,7 +757,12 @@ int main() {
         }
     }
 
-    // mess around with fibonacci heap a bit
+    // things to mix up:
+    // - random edges and weights vs unweighted edges vs sparse edges
+    // - log log vs linear linear
+    // - set vs priority queue vs fibonacci heap vs fibonacci heap with marks vs DFS vs BFS
+    // - number marks allowed
+    // - number of nodes
 
     return 0;
 }
