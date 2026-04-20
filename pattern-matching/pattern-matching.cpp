@@ -122,7 +122,7 @@ int main() {
 
     for (size_t text_length = 20; text_length <= 10000; text_length *= 2) {
 
-        for (size_t pattern_length = 1; pattern_length <= 16; pattern_length *= 4) {
+        for (size_t pattern_length = 1; pattern_length <= 20; pattern_length += 9) {
             if (pattern_length < 1) {
                 pattern_length = 1;
             }

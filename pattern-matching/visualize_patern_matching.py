@@ -42,6 +42,19 @@ def _plot_metric(ax, df_pl, categories: list[str], ycol: str, ylabel: str) -> No
     ax.legend(fontsize=8)
 
 
+def _empty_panel(ax, pl) -> None:
+    ax.set_title(f"Pattern length = {pl}")
+    ax.text(
+        0.5,
+        0.5,
+        "No rows for this pattern length.\nRegenerate CSV with current benchmark.",
+        ha="center",
+        va="center",
+        transform=ax.transAxes,
+    )
+    ax.set_axis_off()
+
+
 def main() -> None:
     here = Path(__file__).resolve().parent
     df = load_df(str(here / "pattern_matching_running_times.csv"))
@@ -52,7 +65,6 @@ def main() -> None:
         c for c in df["category"].unique() if c not in preferred
     ]
 
-    pattern_lengths = [1, 4, 16]
     if "pattern_length" not in df.columns:
         fig, ax = plt.subplots(figsize=(10, 5))
         _plot_metric(ax, df, categories, "seconds", "Runtime (s, log)")
@@ -68,48 +80,45 @@ def main() -> None:
         plt.close()
         return
 
-    # ---- Runtime: one row, subplot per pattern length ----
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
-    for ax, pl in zip(axes, pattern_lengths):
+    pattern_lengths = sorted(df["pattern_length"].dropna().unique())
+    ncols = max(1, len(pattern_lengths))
+    grid_cols = max(ncols, 3)
+
+    # One sheet: row 1 runtime (all lengths), row 2 matches-only (3 panels)
+    fig, axes = plt.subplots(2, grid_cols, figsize=(5 * grid_cols, 9), squeeze=False)
+
+    # ---- Row 1: runtime for all pattern lengths ----
+    for j, pl in enumerate(pattern_lengths):
+        ax = axes[0][j]
         df_pl = df[df["pattern_length"] == pl]
         if df_pl.empty:
-            ax.set_title(f"Pattern length = {pl}")
-            ax.text(
-                0.5,
-                0.5,
-                "No rows for this pattern length.\nRegenerate CSV with current benchmark.",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.set_axis_off()
+            _empty_panel(ax, pl)
             continue
         _plot_metric(ax, df_pl, categories, "seconds", "Runtime (s, log)")
         ax.set_title(f"Pattern length = {pl}")
-    fig.suptitle("Runtime vs text length", y=1.02)
-    plt.tight_layout()
-    plt.show()
-    plt.close()
+    for j in range(ncols, grid_cols):
+        axes[0][j].set_axis_off()
 
-    # ---- Matches: one row, subplot per pattern length ----
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
-    for ax, pl in zip(axes, pattern_lengths):
+    # ---- Row 2: exactly three matches panels ----
+    three_lengths = list(pattern_lengths[:3])
+    while len(three_lengths) < 3:
+        three_lengths.append(None)
+
+    for j, pl in enumerate(three_lengths):
+        ax = axes[1][j]
+        if pl is None:
+            ax.set_axis_off()
+            continue
         df_pl = df[df["pattern_length"] == pl]
         if df_pl.empty:
-            ax.set_title(f"Pattern length = {pl}")
-            ax.text(
-                0.5,
-                0.5,
-                "No rows for this pattern length.\nRegenerate CSV with current benchmark.",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.set_axis_off()
+            _empty_panel(ax, pl)
             continue
         _plot_metric(ax, df_pl, categories, "matches", "Matches")
         ax.set_title(f"Pattern length = {pl}")
-    fig.suptitle("Matches vs text length", y=1.02)
+    for j in range(3, grid_cols):
+        axes[1][j].set_axis_off()
+
+    fig.suptitle("Pattern matching benchmarks (all graphs on one sheet)", y=1.0)
     plt.tight_layout()
     plt.show()
     plt.close()
