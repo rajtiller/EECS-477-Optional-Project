@@ -107,8 +107,9 @@ int main() {
     std::vector<int> nums = {};
     std::random_device rd;
     std::mt19937 gen(rd());
+    size_t max_num = 1000;
     std::uniform_int_distribution<> dis(0,
-                                        10000); // so there are basically zero duplicates
+                                        max_num); // so there are basically zero duplicates
     // +1 above so there is one median
     std::ofstream file("selection_running_times.csv");
     file << "category,size,seconds,guessed_median" << std::endl;
@@ -121,23 +122,27 @@ int main() {
     std::vector<bool> use_sorting = {true, false, false, false, false, false};
     std::vector<bool> use_better_median = {false, false, true, true, true, true};
     std::vector<size_t> batch_size = {0, 0, 5, 7, 9, 101};
-    for (size_t i = 0; i < catergories.size(); i++) {
-        for (size_t SIZE = 9; SIZE <= 10000000; SIZE *= 3) {
-            nums.clear();
-            for (size_t j = 0; j < SIZE; j++) {
-                nums.push_back(dis(gen));
-            }
+    for (size_t SIZE = 10; SIZE <= 10000000; SIZE *= 3) {
+        nums.clear();
+        for (size_t j = 0; j < SIZE; j++) {
+            nums.push_back(dis(gen));
+        }
+        for (size_t i = 0; i < catergories.size(); i++) {
+            std::vector<int> nums_copy = nums;
             auto start = std::chrono::steady_clock::now();
             double guessed_median =
-                find_median_good(nums, use_sorting[i], use_better_median[i], batch_size[i]);
+                find_median_good(nums_copy, use_sorting[i], use_better_median[i], batch_size[i]);
             auto end = std::chrono::steady_clock::now();
+            std::cout << "Guessed median: " << guessed_median << std::endl;
             double seconds = std::chrono::duration<double>(end - start).count();
             (void)guessed_median;
-            file << catergories[i] << "," << SIZE << "," << seconds << "," << guessed_median
-                 << std::endl;
+            file << catergories[i] << "," << SIZE << "," << seconds << ","
+                 << (guessed_median - max_num / 2) << std::endl;
         }
     }
     // things to change
     // - odd versus even nums size
+    // - change range of numbers allowed in nums
+
     return 0;
 }
