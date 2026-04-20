@@ -36,7 +36,7 @@ def main() -> None:
     ax.grid(True, which="both", linestyle="--", alpha=0.4)
     ax.legend()
 
-    # ---- Plot 2: Guessed median correctness ----
+    # ---- Plot 2: Guessed median values (with sorting baseline) ----
     ax = axes[1]
     if "guessed_median" in df.columns:
         baseline = (
@@ -46,18 +46,25 @@ def main() -> None:
         )
         if not baseline.empty:
             merged = df.merge(baseline, on="size", how="left")
-            merged["median_abs_error"] = (merged["guessed_median"] - merged["true_median"]).abs()
             for category in categories:
                 sub = merged[merged["category"] == category].sort_values("size")
                 if sub.empty:
                     continue
-                ax.plot(sub["size"], sub["median_abs_error"], marker="o", label=category)
+                ax.plot(sub["size"], sub["guessed_median"], marker="o", label=category)
+            baseline_line = baseline.sort_values("size")
+            ax.plot(
+                baseline_line["size"],
+                baseline_line["true_median"],
+                linestyle="--",
+                linewidth=2,
+                color="black",
+                label="expected (sorting)",
+            )
             ax.set_xscale("log")
-            ax.set_yscale("log")
             ax.set_xlabel("Input size (log scale)")
-            ax.set_ylabel("|guessed median - true median|")
-            ax.set_title("Median Accuracy by Category")
-            ax.grid(True, which="both", linestyle="--", alpha=0.4)
+            ax.set_ylabel("Guessed median")
+            ax.set_title("Guessed Median by Category")
+            ax.grid(True, linestyle="--", alpha=0.4)
             ax.legend()
         else:
             ax.text(

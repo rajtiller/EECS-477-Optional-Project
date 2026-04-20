@@ -135,9 +135,8 @@ int main() {
             auto end = std::chrono::steady_clock::now();
             std::cout << "Guessed median: " << guessed_median << std::endl;
             double seconds = std::chrono::duration<double>(end - start).count();
-            (void)guessed_median;
             file << catergories[i] << "," << SIZE << "," << seconds << ","
-                 << (guessed_median - max_num / 2) << std::endl;
+                 << (guessed_median - max_num / 2.0) << std::endl;
         }
     }
     // things to change
