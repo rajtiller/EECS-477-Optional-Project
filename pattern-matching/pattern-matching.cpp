@@ -164,7 +164,8 @@ int main() {
     std::vector<ALPHABET> pattern = {ALPHABET::A};
 
     std::ofstream file("pattern_matching_running_times.csv");
-    file << "category,text_length,pattern_length,seconds,matches, misses" << std::endl;
+    file << "category,text_length,pattern_length,seconds,matches, misses, alphabet_size"
+         << std::endl;
     std::vector<std::string> categories = {"naive", "no-checks", "checks", "logn", "logn + checks"};
     std::vector<bool> use_naive = {true, false, false, false, false};
     std::vector<bool> use_checks = {false, false, true, false, true};
@@ -212,7 +213,8 @@ int main() {
                 auto end = std::chrono::steady_clock::now();
                 double seconds = std::chrono::duration<double>(end - start).count();
                 file << categories[i] << "," << text_length << "," << pattern_length << ","
-                     << seconds << "," << matches << "," << matches - total_matches << std::endl;
+                     << seconds << "," << matches << "," << matches - total_matches << ","
+                     << ALPHABET_SIZE << std::endl;
             }
         }
     }

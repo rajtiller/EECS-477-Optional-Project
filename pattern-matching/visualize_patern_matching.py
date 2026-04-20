@@ -5,6 +5,8 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 
+ALPHABET_SIZE = 2
+
 
 def load_df(path: str) -> pd.DataFrame:
     path = Path(path)
@@ -120,6 +122,21 @@ def main() -> None:
             _empty_panel(ax, pl)
             continue
         _plot_metric(ax, df_pl, categories, "matches", "Matches")
+        expected = (
+            df_pl[["text_length"]]
+            .drop_duplicates()
+            .sort_values("text_length")
+            .assign(expected_matches=lambda x: x["text_length"] / (ALPHABET_SIZE ** pl))
+        )
+        ax.plot(
+            expected["text_length"],
+            expected["expected_matches"],
+            linestyle="--",
+            linewidth=2,
+            color="black",
+            label="Expected matches",
+        )
+        ax.legend(fontsize=8)
         ax.set_title(f"Pattern length = {pl}")
     for j in range(3, grid_cols):
         axes[1][j].set_axis_off()
