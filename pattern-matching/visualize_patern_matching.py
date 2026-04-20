@@ -118,7 +118,7 @@ def main() -> None:
     for j in range(3, grid_cols):
         axes[1][j].set_axis_off()
 
-    fig.suptitle("Pattern matching benchmarks (all graphs on one sheet)", y=1.0)
+    fig.suptitle("", y=1.0)
     plt.tight_layout()
     plt.show()
     plt.close()

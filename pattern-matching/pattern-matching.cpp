@@ -7,7 +7,7 @@
 #include <set>
 #include <vector>
 
-constexpr int ALPHABET_SIZE = 2;
+constexpr int ALPHABET_SIZE = 5;
 
 enum class ALPHABET { A };
 
@@ -120,9 +120,9 @@ int main() {
     std::vector<bool> use_checks = {false, false, true, false, true};
     std::vector<bool> use_logn = {false, false, false, true, true};
 
-    for (size_t text_length = 20; text_length <= 10000; text_length *= 2) {
+    for (size_t text_length = 200; text_length <= 10000; text_length *= 2) {
 
-        for (size_t pattern_length = 1; pattern_length <= 20; pattern_length += 9) {
+        for (size_t pattern_length = 1; pattern_length <= 200; pattern_length *= 14) {
             if (pattern_length < 1) {
                 pattern_length = 1;
             }
