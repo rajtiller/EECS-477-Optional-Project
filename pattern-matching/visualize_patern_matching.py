@@ -11,20 +11,26 @@ def load_df(path: str) -> pd.DataFrame:
     with path.open(newline="", encoding="utf-8") as f:
         header = next(csv.reader(f))
     if "pattern_length" in header:
-        return pd.read_csv(path)
+        df = pd.read_csv(path)
+        df.columns = [c.strip() for c in df.columns]
+        return df
     if len(header) == 4 and header[0] == "category":
         # Rows are category,text_length,pattern_length,seconds,matches
-        return pd.read_csv(
+        df = pd.read_csv(
             path,
             names=["category", "text_length", "pattern_length", "seconds", "matches"],
             skiprows=1,
         )
+        df.columns = [c.strip() for c in df.columns]
+        return df
     # Oldest format: no pattern_length column
-    return pd.read_csv(
+    df = pd.read_csv(
         path,
         names=["category", "text_length", "seconds", "matches"],
         skiprows=1,
     )
+    df.columns = [c.strip() for c in df.columns]
+    return df
 
 
 def _plot_metric(ax, df_pl, categories: list[str], ycol: str, ylabel: str) -> None:
@@ -84,8 +90,8 @@ def main() -> None:
     ncols = max(1, len(pattern_lengths))
     grid_cols = max(ncols, 3)
 
-    # One sheet: row 1 runtime (all lengths), row 2 matches-only (3 panels)
-    fig, axes = plt.subplots(2, grid_cols, figsize=(5 * grid_cols, 9), squeeze=False)
+    # One sheet: row 1 runtime (all lengths), row 2 matches (3 panels), row 3 misses (3 panels)
+    fig, axes = plt.subplots(3, grid_cols, figsize=(5 * grid_cols, 13), squeeze=False)
 
     # ---- Row 1: runtime for all pattern lengths ----
     for j, pl in enumerate(pattern_lengths):
@@ -117,6 +123,32 @@ def main() -> None:
         ax.set_title(f"Pattern length = {pl}")
     for j in range(3, grid_cols):
         axes[1][j].set_axis_off()
+
+    # ---- Row 3: exactly three missed-match panels ----
+    for j, pl in enumerate(three_lengths):
+        ax = axes[2][j]
+        if pl is None:
+            ax.set_axis_off()
+            continue
+        df_pl = df[df["pattern_length"] == pl]
+        if df_pl.empty:
+            _empty_panel(ax, pl)
+            continue
+        if "misses" not in df_pl.columns:
+            ax.text(
+                0.5,
+                0.5,
+                "No 'misses' column in CSV.",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_axis_off()
+            continue
+        _plot_metric(ax, df_pl, categories, "misses", "Missed matches")
+        ax.set_title(f"Pattern length = {pl}")
+    for j in range(3, grid_cols):
+        axes[2][j].set_axis_off()
 
     fig.suptitle("", y=1.0)
     plt.tight_layout()
