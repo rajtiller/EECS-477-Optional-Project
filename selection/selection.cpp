@@ -10,9 +10,32 @@
 // finding median vs lowest vs random, does mediant of medians work for finding 20th percentile?
 // varying batch size as we get lower
 
+int quick_five_median(std::vector<int> &nums) {
+    auto [a, b, c, d, e] = std::array<int, 5>{nums[0], nums[1], nums[2], nums[3], nums[4]};
+    if (a > b)
+        std::swap(a, b); // 1
+    if (c > d)
+        std::swap(c, d); // 2
+    if (a > c) {         // 3
+        std::swap(a, c);
+        std::swap(b, d);
+    }
+    if (b > e)
+        std::swap(b, e); // 4
+    if (b > c)
+        std::swap(b, c); // 5
+    if (d > e)
+        std::swap(d, e); // 6
+
+    return b < d ? d : b; // median
+}
+
 int median_of_medians(std::vector<int> &nums, size_t batch_size) {
     std::vector<int> medians;
     if (nums.size() < batch_size) {
+        if (nums.size() == 5) {
+            return quick_five_median(nums);
+        }
         std::sort(nums.begin(), nums.end());
         return nums[nums.size() / 2];
     }
@@ -88,10 +111,10 @@ int main() {
                                         10000); // so there are basically zero duplicates
     // +1 above so there is one median
     std::ofstream file("selection_running_times.csv");
-    file << "category,size,seconds" << std::endl;
+    file << "category,size,seconds,guessed_median" << std::endl;
     std::vector<std::string> catergories = {"sorting",
                                             "quickselect",
-                                            "quickselect + better median (5)",
+                                            "quickselect + quick five median (5)",
                                             "quickselect + better median (7)",
                                             "quickselect + better median (9)",
                                             "quickselect + better median (101)"};
@@ -99,7 +122,7 @@ int main() {
     std::vector<bool> use_better_median = {false, false, true, true, true, true};
     std::vector<size_t> batch_size = {0, 0, 5, 7, 9, 101};
     for (size_t i = 0; i < catergories.size(); i++) {
-        for (size_t SIZE = 10; SIZE <= 10000000; SIZE *= 2) {
+        for (size_t SIZE = 9; SIZE <= 10000000; SIZE *= 3) {
             nums.clear();
             for (size_t j = 0; j < SIZE; j++) {
                 nums.push_back(dis(gen));
@@ -110,8 +133,11 @@ int main() {
             auto end = std::chrono::steady_clock::now();
             double seconds = std::chrono::duration<double>(end - start).count();
             (void)guessed_median;
-            file << catergories[i] << "," << SIZE << "," << seconds << std::endl;
+            file << catergories[i] << "," << SIZE << "," << seconds << "," << guessed_median
+                 << std::endl;
         }
     }
+    // things to change
+    // - odd versus even nums size
     return 0;
 }
