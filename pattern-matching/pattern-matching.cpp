@@ -1,13 +1,14 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <random>
 #include <set>
 #include <vector>
 
-constexpr int ALPHABET_SIZE = 5;
+constexpr int ALPHABET_SIZE = 2;
 
 enum class ALPHABET { A };
 
@@ -42,23 +43,56 @@ size_t num_matches(const std::vector<ALPHABET> &text, const std::vector<ALPHABET
     return num_matches;
 }
 
+void safe_subtract(int64_t &a, int64_t &b, int64_t &prime) {
+    assert(b >= 0);
+    assert(a >= 0);
+    assert(prime > 0);
+    a = ((a % prime) - (b % prime) + prime) % prime;
+}
+
+void safe_add(int64_t &a, int64_t &b, int64_t &prime) {
+    assert(b >= 0);
+    assert(a >= 0);
+    assert(prime > 0);
+    a = ((a % prime) + (b % prime)) % prime;
+}
+
+void safe_multiply(int64_t &a, int64_t b, int64_t &prime) {
+    assert(b >= 0);
+    assert(a >= 0);
+    assert(prime > 0);
+    a = ((a % prime) * (b % prime)) % prime;
+}
+
+void safe_power(int64_t &num, int64_t pow, int64_t &prime) {
+    assert(num >= 0);
+    assert(pow >= 0);
+    assert(prime > 0);
+    int64_t result = 1;
+    for (int64_t i = 0; i < pow; i++) {
+        safe_multiply(result, num, prime);
+    }
+    num = result;
+}
+
 size_t karp_rabin(const std::vector<ALPHABET> &text, const std::vector<ALPHABET> &pattern,
                   bool use_naive, bool use_check, bool use_logn) {
     if (use_naive) {
         return num_matches(text, pattern);
     }
     size_t num_iterations = 1;
-    size_t prime = 1000000007;
+    int64_t prime = 1000000007;
     if (use_logn) {
         num_iterations = std::log2(text.size()) + 1;
     }
     std::set<size_t> global_matches;
 
     for (size_t i = 0; i < num_iterations; i++) {
+        static constexpr char kLetters[] = "ACGT";
         size_t eval_num = 100 + i;
         std::set<size_t> matches;
         size_t pattern_hash = hash(pattern, eval_num, prime);
-        std::vector<size_t> text_hashes = std::vector<size_t>(text.size() - pattern.size() + 1);
+        std::vector<int64_t> text_hashes = std::vector<int64_t>(text.size() - pattern.size() + 1);
         std::vector<ALPHABET> text_subset = std::vector<ALPHABET>(pattern.size());
         for (size_t i = 0; i < pattern.size(); i++) {
             text_subset[i] = text[i];
@@ -67,18 +101,45 @@ size_t karp_rabin(const std::vector<ALPHABET> &text, const std::vector<ALPHABET>
         if (text_hashes[0] == pattern_hash) {
             matches.insert(0);
         }
-        size_t eval_num_pow = static_cast<size_t>(std::pow(eval_num, pattern.size() - 1)) % prime;
-        for (size_t i = 1; i < text.size() - pattern.size() + 1; i++) {
-            text_hashes[i] =
-                (text_hashes[i - 1] - (static_cast<size_t>(text[i - 1]) * eval_num_pow) % prime) *
-                    eval_num +
-                static_cast<size_t>(text[i + pattern.size() - 1]);
-            text_hashes[i] %= prime;
-            for (size_t j = 0; j < pattern.size(); j++) {
-                text_subset[j] = text[i + j];
+
+        int64_t eval_num_pow = eval_num;
+        safe_power(eval_num_pow, pattern.size() - 1, prime);
+        std::cout << "Pattern size: " << pattern.size() << std::endl;
+        std::cout << "Pattern hash: " << pattern_hash << std::endl;
+        std::cout << "First text hash: " << text_hashes[0] << std::endl;
+        std::cout << "Eval num: " << eval_num << std::endl;
+        std::cout << "Eval num pow: " << eval_num_pow << std::endl;
+        for (size_t j = 1; j + pattern.size() <= text.size(); j++) {
+            int64_t to_subtract = eval_num_pow;
+            int64_t to_multiply = static_cast<int64_t>(eval_num);
+            std::cout << "removing char " << kLetters[static_cast<size_t>(text[j - 1])]
+                      << std::endl;
+            safe_multiply(to_subtract, static_cast<int64_t>(text[j - 1]), prime);
+            std::cout << "to subtract " << to_subtract << std::endl;
+            int64_t to_add = static_cast<int64_t>(text[j + pattern.size() - 1]);
+            std::cout << "adding char "
+                      << kLetters[static_cast<size_t>(text[j + pattern.size() - 1])] << std::endl;
+            std::cout << "to add " << to_add << std::endl;
+            int64_t prev_hash = text_hashes[j - 1];
+            safe_subtract(prev_hash, to_subtract, prime);
+            safe_multiply(prev_hash, to_multiply, prime);
+            safe_add(prev_hash, to_add, prime);
+            text_hashes[j] = prev_hash;
+            for (size_t k = 0; k < pattern.size(); k++) {
+                text_subset[k] = text[k + j];
             }
-            if (text_hashes[i] == pattern_hash) {
-                matches.insert(i);
+            std::cout << "text subset";
+            for (auto elem : text_subset) {
+                std::cout << kLetters[static_cast<size_t>(elem)] << " ";
+            }
+            std::cout << std::endl;
+            if (hash(text_subset, eval_num, prime) != text_hashes[j]) {
+                std::cout << "Expected hash: " << hash(text_subset, eval_num, prime) << std::endl;
+                std::cout << "Actual hash: " << text_hashes[j] << std::endl;
+            }
+            assert(hash(text_subset, eval_num, prime) == text_hashes[j]);
+            if (text_hashes[j] == pattern_hash) {
+                matches.insert(j);
             }
         }
         if (i == 0) {
@@ -136,14 +197,14 @@ int main() {
                 pattern.push_back(static_cast<ALPHABET>(base_dis(gen)));
             }
             // print out text and pattern
-            // std::cout << "Text: ";
-            // for (const ALPHABET &num : text) {
-            //     std::cout << kLetters[static_cast<size_t>(num)] << ' ';
-            // }
-            // std::cout << "Pattern: ";
-            // for (const ALPHABET &num : pattern) {
-            //     std::cout << kLetters[static_cast<size_t>(num)] << ' ';
-            // }
+            std::cout << "Text: ";
+            for (const ALPHABET &num : text) {
+                std::cout << kLetters[static_cast<size_t>(num)] << ' ';
+            }
+            std::cout << "Pattern: ";
+            for (const ALPHABET &num : pattern) {
+                std::cout << kLetters[static_cast<size_t>(num)] << ' ';
+            }
             size_t total_matches = 0;
             for (size_t i = 0; i < categories.size(); i++) {
                 auto start = std::chrono::steady_clock::now();
